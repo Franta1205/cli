@@ -1,6 +1,7 @@
 package rmbranch
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -9,12 +10,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type cmdPair struct {
+	B  []string
+	Cb string
+}
+
+func newCmdPair(b []string, cb string) *cmdPair {
+	return &cmdPair{b, cb}
+}
+
 func CreateRmBranchCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "rm_branch",
 		Short:   "Remove git branches",
 		Long:    "A tool to safely remove Git branches with additional sfety checks",
-		Example: "rm_branch *, rm_branch feat/new-feature",
+		Example: "rm_branch all",
 		RunE:    rmBranch,
 	}
 	return cmd
@@ -36,14 +46,15 @@ func rmBranch(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no branch specified")
 	}
 
-	_, err := getCurrentBranch()
-
+	cb, err := getCurrentBranch()
 	if err != nil {
 		color.Red("error: Failed to get current branch: %v", err)
+		return fmt.Errorf("error: %v", err)
 	}
-
-	if args[0] == "all" {
-		color.Yellow("Deleting all branches")
+	c := newCmdPair(args, cb)
+	if err := c.deleteBranches(); err != nil {
+		color.Red("error: %v", err)
+		return fmt.Errorf("error: %v", err)
 	}
 	return nil
 }
@@ -60,5 +71,49 @@ func getCurrentBranch() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(output)), nil
+	cb := strings.TrimSpace(string(output))
+	color.Yellow("current branch: %v\n", cb)
+	return cb, nil
+}
+
+func (c *cmdPair) deleteBranches() error {
+	if c.B[0] == "all" {
+		color.Yellow("Deleting all branches from current repository")
+		branches, _ := getAllBranches()
+		for _, b := range branches {
+			if b == "main" || b == "master" || b == c.Cb {
+				color.Yellow("skipping %v", b)
+				continue
+			}
+
+			color.Yellow("Deleting: %v", b)
+			cmd := exec.Command("git", "branch", "-D", b)
+			cmd.Run()
+			color.Green("%v\t branch deleted", b)
+		}
+	} else {
+		return errors.New("branch deletion is not implemented for specific branches")
+	}
+	return nil
+}
+
+func getAllBranches() ([]string, error) {
+	cmd := exec.Command("git", "branch", "--list")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	branches := make([]string, 0, len(lines))
+
+	for _, line := range lines {
+		branch := strings.TrimSpace(line)
+		if strings.HasPrefix(branch, "* ") {
+			branch = strings.TrimPrefix(branch, "* ")
+		}
+		branches = append(branches, branch)
+	}
+
+	return branches, nil
 }
