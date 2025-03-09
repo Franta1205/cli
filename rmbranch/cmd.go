@@ -1,7 +1,6 @@
 package rmbranch
 
 import (
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -92,7 +91,7 @@ func (c *cmdPair) deleteBranches() error {
 			color.Green("%v\t branch deleted", b)
 		}
 	} else {
-		return errors.New("branch deletion is not implemented for specific branches")
+		return fmt.Errorf("branch deletion is not implemented for specific branches")
 	}
 	return nil
 }
